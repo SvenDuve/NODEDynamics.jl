@@ -15,17 +15,8 @@ using RLTypes
 using OneHotArrays
 
 
-export modelEnv, setReward, NODE, train_step!, accuracy
+export modelEnv, NODE, train_step!, accuracy
 
-
-
-function setReward(state_size, action_size)
-
-    return Chain(Dense(state_size + action_size + state_size, 64, tanh),
-                    Dense(64, 64, tanh),
-                    Dense(64, 1))
-                    
-end
 
 
 
@@ -38,6 +29,11 @@ end
 Flux.@functor NODE
 
 
+"""
+    NODE(input_size::Int, ode_size::Int, output_size::Int)
+
+Create a NODE model with the given input, ode and output size.
+"""
 function NODE(input_size::Int, ode_size::Int, output_size::Int)
     input = Chain(Dense(input_size, ode_size))
     f_theta = Chain(Dense(ode_size, 32, tanh), Dense(32, ode_size))#, Dense(100,hidden_size, tanh))
@@ -45,7 +41,11 @@ function NODE(input_size::Int, ode_size::Int, output_size::Int)
     NODE(input, f_theta, output)
 end
 
+"""
+    (m::NODE)(timestamps, datapoints)
 
+Apply the NODE model to the given timestamps and datapoints.
+"""
 function (m::NODE)(timestamps, datapoints)
     
     x = m.input(datapoints)
@@ -63,13 +63,22 @@ function (m::NODE)(timestamps, datapoints)
 
 end
 
+"""
+    accuracy(y_true, y_pred, tolerance)
+
+Calculate the accuracy of the prediction given the true values and a tolerance.
+"""
 function accuracy(y_true, y_pred, tolerance)
     correct = sum(abs.(y_true .- y_pred) .<= tolerance)
     return correct / length(y_true)
 end
 
 
-#function train_step!(S, A, R, S´, T, fθ, Rϕ, model_opt, reward_opt)
+"""
+    train_step!(environment::ContinuousEnvironment, S, A, R, S´, T, fθ, model_opt)
+
+Train the continuous action model using the given data with gradient descent.
+"""
 function train_step!(environment::ContinuousEnvironment, S, A, R, S´, T, fθ, model_opt)
 
     X = vcat(S, A)
@@ -83,13 +92,15 @@ function train_step!(environment::ContinuousEnvironment, S, A, R, S´, T, fθ, m
     dθ = Flux.gradient(m -> Flux.Losses.mse(m(timestamps, X), S´), fθ)
     Flux.update!(model_opt, fθ, dθ[1])
     
-    # dϕ = Flux.gradient(m -> Flux.Losses.mse(m(vcat(S, A, S´)), hcat(R...)), Rϕ)
-    # Flux.update!(reward_opt, Rϕ, dϕ[1])
-
 
 end
 
 
+"""
+    train_step!(environment::DiscreteEnvironment, S, A, R, S´, T, fθ, model_opt, ep::EnvParameter)
+
+Train the discrete action model using the given data with gradient descent.
+"""
 function train_step!(environment::DiscreteEnvironment, S, A, R, S´, T, fθ, model_opt, ep::EnvParameter)
 
     X = vcat(S, onehotbatch(vcat(A...), ep.labels))
@@ -110,7 +121,11 @@ function train_step!(environment::DiscreteEnvironment, S, A, R, S´, T, fθ, mod
 end
 
 
+"""
+    modelEnv(environment::ContinuousEnvironment, modelParams::ModelParameter)
 
+Main algorithm to train the continuous action model using the given environment and model parameters.
+"""
 function modelEnv(environment::ContinuousEnvironment, modelParams::ModelParameter)
 
     gym = pyimport("gymnasium")
@@ -141,9 +156,6 @@ function modelEnv(environment::ContinuousEnvironment, modelParams::ModelParamete
 
     fθ = NODE(envParams.state_size + envParams.action_size, modelParams.ode_size, envParams.state_size)
     model_opt = Flux.setup(Flux.Optimise.Adam(modelParams.model_η), fθ)
-
-    # Rϕ = setReward(envParams.state_size, envParams.action_size)
-    # reward_opt = Flux.setup(Flux.Optimise.Adam(modelParams.reward_η), Rϕ)
 
     train_buffer = ReplayBuffer(modelParams.buffer_size)
     test_buffer = ReplayBuffer(modelParams.buffer_size)
@@ -237,6 +249,11 @@ function modelEnv(environment::ContinuousEnvironment, modelParams::ModelParamete
 end
 
 
+"""
+    modelEnv(environment::DiscreteEnvironment, modelParams::ModelParameter)
+
+Main algorithm to train the discrete action model using the given environment and model parameters.
+"""
 function modelEnv(environment::DiscreteEnvironment, modelParams::ModelParameter)
 
     gym = pyimport("gymnasium")
